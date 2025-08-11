@@ -1,0 +1,62 @@
+import pandas as pd
+from pathlib import Path
+
+def mark_chapters():
+    print("Marking ICD codes with chapters...")
+
+    # Set base directories dynamically relative to script's location
+    BASE_DIR = Path(__file__).resolve().parent.parent
+    DATA_DIR = BASE_DIR / 'data'
+    OUTPUT_DIR = BASE_DIR / 'output'
+
+    # Ensure output directory exists
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Load the ICD-10 hierarchy data
+    icd_file = OUTPUT_DIR / 'icd10_hierarchy.csv'
+    df = pd.read_csv(icd_file)
+
+    # Load chapter definitions
+    chapters_file = DATA_DIR / 'icd10_chapters.csv'
+    chapters = pd.read_csv(chapters_file)  # columns: ID, Name, Range
+
+    # Build a clean mapping list
+    chapter_ranges = []
+    for _, row in chapters.iterrows():
+        start, end = row['Range'].split('-')
+        chapter_ranges.append({
+            'ID': row['ID'],
+            'Name': row['Name'],
+            'Start': start,
+            'End': end,
+            'Range': row['Range']
+        })
+
+    # Revised mapping function
+    def assign_chapter(icd_code):
+        for chapter in chapter_ranges:
+            start = chapter['Start']
+            end = chapter['End']
+
+            # If exact code in between
+            if start <= icd_code <= end:
+                return chapter['Name'], chapter['Range']
+
+            # Handle edge prefix overlap — if at end of range like D49 and code starts with D49
+            if icd_code.startswith(end):
+                return chapter['Name'], chapter['Range']
+
+        return 'Unclassified', 'NA'
+
+    # Apply mapping
+    df[['CHAPTER_NAME', 'CHAPTER_RANGE']] = df['ICD_CODE'].apply(lambda x: pd.Series(assign_chapter(x)))
+
+    # Save output
+    output_file = OUTPUT_DIR / 'icd10_hierarchy_with_chapters.csv'
+    df.to_csv(output_file, index=False)
+
+    print(f"✅ ICD-10 codes successfully mapped to chapters and ranges. Output saved to {output_file}")
+
+# Only run if directly called
+if __name__ == "__main__":
+    mark_chapters()
